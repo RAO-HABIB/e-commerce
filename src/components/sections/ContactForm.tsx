@@ -2,10 +2,13 @@
 
 import React, { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { apiRequest } from "@/lib/api";
 import { Send, MapPin, Mail, Phone, MessageSquare, CheckCircle2 } from "lucide-react";
 
 export const ContactForm: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -13,9 +16,21 @@ export const ContactForm: React.FC = () => {
     message: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setIsSubmitting(true);
+    setSubmitError("");
+    try {
+      await apiRequest("/api/contacts", {
+        method: "POST",
+        body: JSON.stringify(formData),
+      });
+      setSubmitted(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to send your message.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -151,9 +166,15 @@ export const ContactForm: React.FC = () => {
               ></textarea>
             </div>
 
-            <Button type="submit" size="lg" className="w-full mt-2">
+            {submitError && (
+              <p role="alert" className="text-xs font-numeric text-red-400">
+                {submitError}
+              </p>
+            )}
+
+            <Button type="submit" size="lg" className="w-full mt-2" disabled={isSubmitting}>
               <Send className="w-4 h-4" />
-              <span>TRANSMIT DISPATCH</span>
+              <span>{isSubmitting ? "TRANSMITTING..." : "TRANSMIT DISPATCH"}</span>
             </Button>
           </form>
         )}

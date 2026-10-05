@@ -5,11 +5,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "@/lib/cart-context";
 import { Button } from "@/components/ui/Button";
+import { apiRequest } from "@/lib/api";
 import { ShieldCheck, CreditCard, Lock, ArrowRight, CheckCircle2 } from "lucide-react";
 
 export const CheckoutForm: React.FC = () => {
   const { cart, subtotal, clearCart } = useCart();
   const [step, setStep] = useState<"form" | "success">("form");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [confirmedOrder, setConfirmedOrder] = useState<{ orderNumber: string } | null>(null);
   const [formData, setFormData] = useState({
     email: "alexander.vance@kinetic.design",
     firstName: "Alexander",
@@ -29,10 +33,44 @@ export const CheckoutForm: React.FC = () => {
   const estimatedTax = subtotal * 0.0825;
   const grandTotal = subtotal + shipping + estimatedTax;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStep("success");
-    clearCart();
+    if (cart.length === 0) {
+      setSubmitError("Your cart is empty.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError("");
+    try {
+      const order = await apiRequest<{ orderNumber: string }>("/api/orders", {
+        method: "POST",
+        body: JSON.stringify({
+          email: formData.email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          postalCode: formData.postalCode,
+          country: formData.country,
+          deliveryMethod: formData.deliveryMethod,
+          items: cart.map((item) => ({
+            productId: item.product.id,
+            quantity: item.quantity,
+            size: item.size,
+            colorway: item.colorway,
+          })),
+        }),
+      });
+      setConfirmedOrder(order);
+      clearCart();
+      setStep("success");
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to place your order.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (step === "success") {
@@ -44,7 +82,7 @@ export const CheckoutForm: React.FC = () => {
 
         <div>
           <span className="font-numeric text-xs text-[#FF6600] tracking-widest uppercase">
-            PROTOCOL ORDER CONFIRMED // #NX-94281
+            PROTOCOL ORDER CONFIRMED // #{confirmedOrder?.orderNumber}
           </span>
           <h2 className="font-display font-black text-3xl uppercase text-[#F5F5F5] mt-2">
             DISPATCH PREPARATION INITIATED
@@ -57,7 +95,7 @@ export const CheckoutForm: React.FC = () => {
         <div className="w-full p-4 bg-[#0A0A0A] border border-[#2A2A2A] rounded-[4px] text-left text-xs font-numeric flex flex-col gap-2">
           <div className="flex justify-between text-[#9E9E9E]">
             <span>TRACKING ID:</span>
-            <span className="text-[#FF6600] font-bold">NX-TRK-8921849102</span>
+            <span className="text-[#FF6600] font-bold">{confirmedOrder?.orderNumber}</span>
           </div>
           <div className="flex justify-between text-[#9E9E9E]">
             <span>ESTIMATED DELIVERY:</span>
@@ -215,6 +253,10 @@ export const CheckoutForm: React.FC = () => {
             <Lock className="w-4 h-4 text-[#9E9E9E]" />
           </div>
 
+          <p className="text-[11px] font-numeric text-[#9E9E9E]">
+            DEMO MODE: card details are not transmitted or stored. Connect Stripe before accepting real payments.
+          </p>
+
           <div>
             <label className="block text-[11px] font-numeric text-[#9E9E9E] mb-1.5 uppercase">
               CARD NUMBER
@@ -305,8 +347,14 @@ export const CheckoutForm: React.FC = () => {
             </div>
           </div>
 
-          <Button type="submit" size="lg" className="w-full">
-            <span>AUTHORIZE &amp; PLACE ORDER</span>
+          {submitError && (
+            <p role="alert" className="text-xs font-numeric text-red-400">
+              {submitError}
+            </p>
+          )}
+
+          <Button type="submit" size="lg" className="w-full" disabled={isSubmitting || cart.length === 0}>
+            <span>{isSubmitting ? "CREATING ORDER..." : "AUTHORIZE & PLACE ORDER"}</span>
             <ArrowRight className="w-4 h-4" />
           </Button>
 
